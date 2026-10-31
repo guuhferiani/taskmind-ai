@@ -94,3 +94,4 @@ export async function breakdownGoalWithGemini(goalTitle, goalDescription = '') {
     throw new Error('A IA gerou uma resposta fora do formato estruturado. Tente novamente.')
   }
 }
+
