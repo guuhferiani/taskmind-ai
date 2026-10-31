@@ -82,3 +82,4 @@ Este repositório atende às 8 Capacidades Técnicas e 4 Capacidades Socioemocio
 
 ## 📄 Licença e Uso Didático
 Projeto desenvolvido para fins educacionais e formativos no SENAI-SP.
+

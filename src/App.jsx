@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import FirebaseStatus from './components/FirebaseStatus'
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -138,10 +139,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-3">
-            <div className="hidden sm:flex items-center space-x-2 text-xs font-medium bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200/60">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Primeira Interface Pronta</span>
-            </div>
+            <FirebaseStatus />
             <a 
               href="https://github.com/guuhferiani/taskmind-ai" 
               target="_blank" 
@@ -367,3 +365,4 @@ export default function App() {
     </div>
   )
 }
+
