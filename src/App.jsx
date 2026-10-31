@@ -10,6 +10,7 @@ import {
   toggleSubtaskStatus, 
   deleteTask 
 } from './services/taskService'
+import { breakdownGoalWithGemini } from './services/geminiService'
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -37,7 +38,6 @@ export default function App() {
   // Sincronização em tempo real com o Cloud Firestore filtrada por UID
   useEffect(() => {
     if (!currentUser) {
-      // Tarefas demonstrativas quando deslogado
       setTasks([
         {
           id: 'demo-1',
@@ -140,8 +140,8 @@ export default function App() {
     }
   }
 
-  // Simulação de IA (Ação 05 integrará a API real do Gemini)
-  const handleSimulateAiBreakdown = async () => {
+  // Integração Real com a API do Gemini (Google AI Studio)
+  const handleGeminiBreakdown = async () => {
     if (!newTaskTitle.trim()) {
       alert('Digite o título da sua meta primeiro para o Gemini analisar!')
       return
@@ -153,26 +153,22 @@ export default function App() {
     }
 
     setIsAiLoading(true)
-    setTimeout(async () => {
-      setIsAiLoading(false)
-      const simulatedSubtasks = [
-        { id: 'st-1', title: `Definir escopo inicial de: ${newTaskTitle}`, done: false },
-        { id: 'st-2', title: 'Consultar documentação oficial e regras de negócio', done: false },
-        { id: 'st-3', title: 'Executar testes práticos e validar conformidade LGPD', done: false }
-      ]
+    try {
+      const generatedSubtasks = await breakdownGoalWithGemini(newTaskTitle, newTaskDesc)
 
-      try {
-        await createTask(currentUser.uid, {
-          title: newTaskTitle,
-          description: newTaskDesc || 'Meta desdobrada com inteligência artificial.',
-          subtasks: simulatedSubtasks
-        })
-        setNewTaskTitle('')
-        setNewTaskDesc('')
-      } catch (err) {
-        console.error('Erro ao persistir meta da IA:', err)
-      }
-    }, 900)
+      await createTask(currentUser.uid, {
+        title: newTaskTitle,
+        description: newTaskDesc || 'Meta desdobrada com IA pelo Google Gemini.',
+        subtasks: generatedSubtasks
+      })
+
+      setNewTaskTitle('')
+      setNewTaskDesc('')
+    } catch (err) {
+      alert(err.message || 'Erro ao processar com o Gemini. Verifique a chave no .env.')
+    } finally {
+      setIsAiLoading(false)
+    }
   }
 
   return (
@@ -188,7 +184,7 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <h1 className="text-lg font-bold tracking-tight text-slate-900">TaskMind AI</h1>
                 <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-full border border-indigo-200/60">
-                  v0.2 Firestore Ready
+                  v0.3 Gemini Active
                 </span>
               </div>
               <p className="text-xs text-slate-500">SENAI SP • Firebase + Gemini</p>
@@ -241,21 +237,21 @@ export default function App() {
               <Database className="w-3.5 h-3.5 text-indigo-300" />
               <span>
                 {currentUser 
-                  ? `Firestore Conectado • UID: ${currentUser.uid.substring(0, 8)}...` 
-                  : 'Ação 04: Persistência NoSQL em Tempo Real'}
+                  ? `Sessão: ${currentUser.email} • UID: ${currentUser.uid.substring(0, 8)}...` 
+                  : 'Ação 05: Integração com Google Gemini AI'}
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
               Transforme grandes metas em planos executáveis com IA.
             </h2>
             <p className="text-indigo-200 text-sm leading-relaxed mb-4">
-              Cada meta criada agora é persistida no <strong>Cloud Firestore</strong> em tempo real, vinculada ao seu usuário. Na Ação 05 ativaremos a <strong>API oficial do Gemini</strong> com o Google AI Studio!
+              Digite qualquer objetivo e clique em <strong>✨ Decompor com Gemini</strong>. O modelo <strong>Gemini 1.5 Flash</strong> quebrará a meta em subtarefas estruturadas e as salvará no <strong>Cloud Firestore</strong> em tempo real!
             </p>
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">React + Vite</span>
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Firebase Auth</span>
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Firestore CRUD</span>
-              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">UID Security</span>
+              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Gemini 1.5 Flash</span>
             </div>
           </div>
         </div>
@@ -270,7 +266,7 @@ export default function App() {
                 <span>Nova Meta ou Tarefa</span>
               </h3>
               <p className="text-xs text-slate-500 mb-4">
-                Digite um objetivo e utilize o assistente para quebrá-lo em passos acionáveis.
+                Digite um objetivo e utilize o Gemini para decompô-lo em passos acionáveis.
               </p>
 
               <form onSubmit={handleAddTask} className="space-y-4">
@@ -282,7 +278,7 @@ export default function App() {
                     type="text"
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="Ex: Aprender a programar com IA"
+                    placeholder="Ex: Aprender React e Firebase em 30 dias"
                     className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                     required
                   />
@@ -296,7 +292,7 @@ export default function App() {
                     value={newTaskDesc}
                     onChange={(e) => setNewTaskDesc(e.target.value)}
                     rows={2}
-                    placeholder="Detalhes ou observações sobre esta meta..."
+                    placeholder="Detalhes ou contexto adicional..."
                     className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   />
                 </div>
@@ -304,19 +300,19 @@ export default function App() {
                 <div className="pt-2 flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
-                    onClick={handleSimulateAiBreakdown}
+                    onClick={handleGeminiBreakdown}
                     disabled={isAiLoading}
                     className="flex-1 inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-medium text-xs shadow-md shadow-indigo-100 transition-all disabled:opacity-50"
                   >
                     <Sparkles className={`w-4 h-4 ${isAiLoading ? 'animate-spin' : ''}`} />
-                    <span>{isAiLoading ? 'Gerando com IA...' : '✨ Decompor com Gemini'}</span>
+                    <span>{isAiLoading ? 'Gemini Analisando...' : '✨ Decompor com Gemini'}</span>
                   </button>
 
                   <button
                     type="submit"
                     className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs transition-colors"
                   >
-                    Criar no Firestore
+                    Criar Simples
                   </button>
                 </div>
               </form>
@@ -355,7 +351,7 @@ export default function App() {
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <h4 className="text-sm font-semibold text-slate-700 mb-1">Nenhuma meta cadastrada</h4>
-                  <p className="text-xs text-slate-400">Crie sua primeira meta ao lado ou use a IA para planejar.</p>
+                  <p className="text-xs text-slate-400">Crie sua primeira meta ao lado ou use o Gemini para planejar.</p>
                 </div>
               ) : (
                 <div className="space-y-4">

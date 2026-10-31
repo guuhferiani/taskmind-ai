@@ -110,3 +110,4 @@ export async function deleteTask(taskId) {
   const taskRef = doc(db, TASKS_COLLECTION, taskId)
   return deleteDoc(taskRef)
 }
+
