@@ -1,8 +1,15 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import FirebaseStatus from './components/FirebaseStatus'
 import AuthModal from './components/AuthModal'
 import UserNavbar from './components/UserNavbar'
 import { useAuth } from './contexts/AuthContext'
+import { 
+  subscribeUserTasks, 
+  createTask, 
+  toggleTaskStatus, 
+  toggleSubtaskStatus, 
+  deleteTask 
+} from './services/taskService'
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -13,95 +20,140 @@ import {
   ShieldCheck, 
   Layers,
   ExternalLink,
-  Lock
+  Lock,
+  Database
 } from 'lucide-react'
 
 export default function App() {
   const { currentUser } = useAuth()
+  const [tasks, setTasks] = useState([])
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-
-  // Estado local para a lista de tarefas (demonstração dos fundamentos de programação)
-  const [tasks, setTasks] = useState([
-    {
-      id: '1',
-      title: 'Aprender Fundamentos de Firebase e Gemini',
-      description: 'Dominar o plano Spark, Firestore NoSQL e Engenharia de Prompts.',
-      completed: false,
-      subtasks: [
-        { id: '1-1', title: 'Configurar projeto no Firebase Console', done: true },
-        { id: '1-2', title: 'Criar chave gratuita no Google AI Studio', done: false },
-        { id: '1-3', title: 'Publicar protótipo no Firebase Hosting', done: false }
-      ],
-      createdAt: 'Hoje, 16:00'
-    },
-    {
-      id: '2',
-      title: 'Estruturar o Repositório e Primeiro Push no GitHub',
-      description: 'Garantir que a primeira interface esteja versionada e segura na nuvem.',
-      completed: true,
-      subtasks: [
-        { id: '2-1', title: 'Criar repositório taskmind-ai no GitHub', done: true },
-        { id: '2-2', title: 'Executar push inicial no terminal com Ctrl + J', done: true }
-      ],
-      createdAt: 'Hoje, 15:30'
-    }
-  ])
 
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDesc, setNewTaskDesc] = useState('')
   const [isAiLoading, setIsAiLoading] = useState(false)
 
-  // Alternar status da tarefa
-  const toggleTask = (taskId) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t))
-  }
-
-  // Alternar status da subtarefa
-  const toggleSubtask = (taskId, subtaskId) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id === taskId) {
-        return {
-          ...t,
-          subtasks: t.subtasks.map(st => st.id === subtaskId ? { ...st, done: !st.done } : st)
+  // Sincronização em tempo real com o Cloud Firestore filtrada por UID
+  useEffect(() => {
+    if (!currentUser) {
+      // Tarefas demonstrativas quando deslogado
+      setTasks([
+        {
+          id: 'demo-1',
+          title: 'Faça login para salvar suas metas no Firestore',
+          description: 'Metas salvas após o login são sincronizadas em tempo real na nuvem.',
+          completed: false,
+          subtasks: [
+            { id: 'd-1', title: 'Criar conta ou entrar com Google', done: false },
+            { id: 'd-2', title: 'Testar a persistência em tempo real', done: false }
+          ],
+          createdAtFormatted: 'Modo Demonstração'
         }
+      ])
+      return
+    }
+
+    setIsLoadingTasks(true)
+    const unsubscribe = subscribeUserTasks(
+      currentUser.uid,
+      (liveTasks) => {
+        setTasks(liveTasks)
+        setIsLoadingTasks(false)
+      },
+      (error) => {
+        console.error('Erro na escuta do Firestore:', error)
+        setIsLoadingTasks(false)
       }
-      return t
-    }))
+    )
+
+    return () => unsubscribe()
+  }, [currentUser])
+
+  // Alternar status da tarefa no Firestore
+  const handleToggleTask = async (task) => {
+    if (!currentUser) {
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: !t.completed } : t))
+      return
+    }
+    try {
+      await toggleTaskStatus(task.id, task.completed)
+    } catch (err) {
+      console.error('Erro ao alternar tarefa:', err)
+    }
   }
 
-  // Excluir tarefa
-  const deleteTask = (taskId) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId))
+  // Alternar status de subtarefa no Firestore
+  const handleToggleSubtask = async (task, subtaskId) => {
+    if (!currentUser) {
+      setTasks(prev => prev.map(t => {
+        if (t.id === task.id) {
+          return {
+            ...t,
+            subtasks: t.subtasks.map(st => st.id === subtaskId ? { ...st, done: !st.done } : st)
+          }
+        }
+        return t
+      }))
+      return
+    }
+    try {
+      await toggleSubtaskStatus(task.id, task.subtasks, subtaskId)
+    } catch (err) {
+      console.error('Erro ao alternar subtarefa:', err)
+    }
+  }
+
+  // Excluir tarefa no Firestore
+  const handleDeleteTask = async (taskId) => {
+    if (!currentUser) {
+      setTasks(prev => prev.filter(t => t.id !== taskId))
+      return
+    }
+    try {
+      await deleteTask(taskId)
+    } catch (err) {
+      console.error('Erro ao excluir tarefa:', err)
+    }
   }
 
   // Adicionar tarefa manual
-  const handleAddTask = (e) => {
+  const handleAddTask = async (e) => {
     e.preventDefault()
     if (!newTaskTitle.trim()) return
 
-    const newTask = {
-      id: Date.now().toString(),
-      title: newTaskTitle,
-      description: newTaskDesc,
-      completed: false,
-      subtasks: [],
-      createdAt: 'Agora'
+    if (!currentUser) {
+      setIsAuthModalOpen(true)
+      return
     }
 
-    setTasks([newTask, ...tasks])
-    setNewTaskTitle('')
-    setNewTaskDesc('')
+    try {
+      await createTask(currentUser.uid, {
+        title: newTaskTitle,
+        description: newTaskDesc,
+        subtasks: []
+      })
+      setNewTaskTitle('')
+      setNewTaskDesc('')
+    } catch (err) {
+      console.error('Erro ao salvar meta no Firestore:', err)
+    }
   }
 
-  // Simulação de IA (antecipando a Ação 05)
-  const handleSimulateAiBreakdown = () => {
+  // Simulação de IA (Ação 05 integrará a API real do Gemini)
+  const handleSimulateAiBreakdown = async () => {
     if (!newTaskTitle.trim()) {
       alert('Digite o título da sua meta primeiro para o Gemini analisar!')
       return
     }
 
+    if (!currentUser) {
+      setIsAuthModalOpen(true)
+      return
+    }
+
     setIsAiLoading(true)
-    setTimeout(() => {
+    setTimeout(async () => {
       setIsAiLoading(false)
       const simulatedSubtasks = [
         { id: 'st-1', title: `Definir escopo inicial de: ${newTaskTitle}`, done: false },
@@ -109,18 +161,17 @@ export default function App() {
         { id: 'st-3', title: 'Executar testes práticos e validar conformidade LGPD', done: false }
       ]
 
-      const newTask = {
-        id: Date.now().toString(),
-        title: newTaskTitle,
-        description: newTaskDesc || 'Meta desdobrada com inteligência artificial.',
-        completed: false,
-        subtasks: simulatedSubtasks,
-        createdAt: 'Criado com IA'
+      try {
+        await createTask(currentUser.uid, {
+          title: newTaskTitle,
+          description: newTaskDesc || 'Meta desdobrada com inteligência artificial.',
+          subtasks: simulatedSubtasks
+        })
+        setNewTaskTitle('')
+        setNewTaskDesc('')
+      } catch (err) {
+        console.error('Erro ao persistir meta da IA:', err)
       }
-
-      setTasks([newTask, ...tasks])
-      setNewTaskTitle('')
-      setNewTaskDesc('')
     }, 900)
   }
 
@@ -137,7 +188,7 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <h1 className="text-lg font-bold tracking-tight text-slate-900">TaskMind AI</h1>
                 <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-full border border-indigo-200/60">
-                  v0.1 Prototype
+                  v0.2 Firestore Ready
                 </span>
               </div>
               <p className="text-xs text-slate-500">SENAI SP • Firebase + Gemini</p>
@@ -164,18 +215,18 @@ export default function App() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
         {/* Aviso pedagógico caso não esteja logado */}
         {!currentUser && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-4">
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center space-x-2.5">
               <Lock className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
-                <strong>Modo Visitante:</strong> Faça login para vincular suas metas ao seu <strong>UID exclusivo</strong> no Firebase.
+                <strong>Modo Visitante:</strong> Faça login para que suas metas sejam salvas na sua conta do <strong>Cloud Firestore</strong> com isolamento por UID.
               </span>
             </div>
             <button
               onClick={() => setIsAuthModalOpen(true)}
               className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-colors shrink-0"
             >
-              Fazer Login
+              Entrar / Cadastrar
             </button>
           </div>
         )}
@@ -187,22 +238,24 @@ export default function App() {
           </div>
           <div className="relative z-10 max-w-2xl">
             <div className="inline-flex items-center space-x-2 bg-indigo-500/20 text-indigo-200 text-xs px-3 py-1 rounded-full mb-3 border border-indigo-400/20 backdrop-blur-sm">
-              <Layers className="w-3.5 h-3.5" />
+              <Database className="w-3.5 h-3.5 text-indigo-300" />
               <span>
-                {currentUser ? `Sessão Ativa: ${currentUser.email}` : 'Sistema de Autenticação Ativo'}
+                {currentUser 
+                  ? `Firestore Conectado • UID: ${currentUser.uid.substring(0, 8)}...` 
+                  : 'Ação 04: Persistência NoSQL em Tempo Real'}
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
               Transforme grandes metas em planos executáveis com IA.
             </h2>
             <p className="text-indigo-200 text-sm leading-relaxed mb-4">
-              Aplicativo estruturado de acordo com o plano de curso do SENAI. Conectamos agora o <strong>Firebase Auth</strong> com isolamento por UID. Na próxima ação ativaremos o banco de dados <strong>Cloud Firestore</strong> em tempo real.
+              Cada meta criada agora é persistida no <strong>Cloud Firestore</strong> em tempo real, vinculada ao seu usuário. Na Ação 05 ativaremos a <strong>API oficial do Gemini</strong> com o Google AI Studio!
             </p>
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">React + Vite</span>
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Firebase Auth</span>
+              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Firestore CRUD</span>
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">UID Security</span>
-              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Gemini AI Studio</span>
             </div>
           </div>
         </div>
@@ -263,7 +316,7 @@ export default function App() {
                     type="submit"
                     className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs transition-colors"
                   >
-                    Criar Direto
+                    Criar no Firestore
                   </button>
                 </div>
               </form>
@@ -286,12 +339,14 @@ export default function App() {
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 min-h-[400px]">
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
                 <div className="flex items-center space-x-2">
-                  <h3 className="text-base font-bold text-slate-900">Metas em Andamento</h3>
+                  <h3 className="text-base font-bold text-slate-900">Metas no Cloud Firestore</h3>
                   <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                     {tasks.length}
                   </span>
                 </div>
-                <span className="text-xs text-slate-400">Tempo Real (Simulado)</span>
+                <span className="text-xs text-slate-400">
+                  {isLoadingTasks ? 'Sincronizando...' : (currentUser ? 'Tempo Real Ativo' : 'Modo Visitante')}
+                </span>
               </div>
 
               {tasks.length === 0 ? (
@@ -315,7 +370,7 @@ export default function App() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <button 
-                          onClick={() => toggleTask(task.id)}
+                          onClick={() => handleToggleTask(task)}
                           className="mt-0.5 text-slate-400 hover:text-indigo-600 transition-colors"
                         >
                           {task.completed ? (
@@ -341,7 +396,7 @@ export default function App() {
                               {task.subtasks.map(subtask => (
                                 <button
                                   key={subtask.id}
-                                  onClick={() => toggleSubtask(task.id, subtask.id)}
+                                  onClick={() => handleToggleSubtask(task, subtask.id)}
                                   className="flex items-center space-x-2 text-xs text-left w-full group"
                                 >
                                   <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
@@ -360,7 +415,7 @@ export default function App() {
                           )}
 
                           <div className="mt-3 flex items-center space-x-3 text-[11px] text-slate-400">
-                            <span>{task.createdAt}</span>
+                            <span>{task.createdAtFormatted || 'Recente'}</span>
                             <span>•</span>
                             <span className="text-indigo-600 font-medium">
                               {task.subtasks?.filter(st => st.done).length || 0}/{task.subtasks?.length || 0} subtarefas
@@ -369,7 +424,7 @@ export default function App() {
                         </div>
 
                         <button 
-                          onClick={() => deleteTask(task.id)}
+                          onClick={() => handleDeleteTask(task.id)}
                           className="text-slate-300 hover:text-rose-500 transition-colors p-1"
                           title="Excluir meta"
                         >
