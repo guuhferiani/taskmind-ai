@@ -1,5 +1,8 @@
 import React, { useState } from 'react'
 import FirebaseStatus from './components/FirebaseStatus'
+import AuthModal from './components/AuthModal'
+import UserNavbar from './components/UserNavbar'
+import { useAuth } from './contexts/AuthContext'
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -9,11 +12,14 @@ import {
   Bot, 
   ShieldCheck, 
   Layers,
-  ArrowRight,
-  ExternalLink
+  ExternalLink,
+  Lock
 } from 'lucide-react'
 
 export default function App() {
+  const { currentUser } = useAuth()
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+
   // Estado local para a lista de tarefas (demonstração dos fundamentos de programação)
   const [tasks, setTasks] = useState([
     {
@@ -140,11 +146,12 @@ export default function App() {
 
           <div className="flex items-center space-x-3">
             <FirebaseStatus />
+            <UserNavbar onOpenAuthModal={() => setIsAuthModalOpen(true)} />
             <a 
               href="https://github.com/guuhferiani/taskmind-ai" 
               target="_blank" 
               rel="noreferrer"
-              className="inline-flex items-center space-x-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+              className="hidden sm:inline-flex items-center space-x-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
             >
               <span>GitHub</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -155,7 +162,25 @@ export default function App() {
 
       {/* Conteúdo Principal */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
-        {/* Banner Pedagógico do Marco 1 */}
+        {/* Aviso pedagógico caso não esteja logado */}
+        {!currentUser && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-4">
+            <div className="flex items-center space-x-2.5">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Modo Visitante:</strong> Faça login para vincular suas metas ao seu <strong>UID exclusivo</strong> no Firebase.
+              </span>
+            </div>
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs transition-colors shrink-0"
+            >
+              Fazer Login
+            </button>
+          </div>
+        )}
+
+        {/* Banner Principal */}
         <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-2xl p-6 sm:p-8 mb-8 shadow-xl relative overflow-hidden">
           <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 flex items-center justify-center pointer-events-none">
             <Bot className="w-64 h-64" />
@@ -163,18 +188,20 @@ export default function App() {
           <div className="relative z-10 max-w-2xl">
             <div className="inline-flex items-center space-x-2 bg-indigo-500/20 text-indigo-200 text-xs px-3 py-1 rounded-full mb-3 border border-indigo-400/20 backdrop-blur-sm">
               <Layers className="w-3.5 h-3.5" />
-              <span>Marco 1 de 2: Primeira Interface & Setup Git</span>
+              <span>
+                {currentUser ? `Sessão Ativa: ${currentUser.email}` : 'Sistema de Autenticação Ativo'}
+              </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
               Transforme grandes metas em planos executáveis com IA.
             </h2>
             <p className="text-indigo-200 text-sm leading-relaxed mb-4">
-              Aplicativo estruturado de acordo com o plano de curso do SENAI. Conectaremos nas próximas ações o <strong>Firebase Auth</strong>, banco <strong>Firestore</strong> em tempo real e a <strong>API oficial do Gemini</strong>.
+              Aplicativo estruturado de acordo com o plano de curso do SENAI. Conectamos agora o <strong>Firebase Auth</strong> com isolamento por UID. Na próxima ação ativaremos o banco de dados <strong>Cloud Firestore</strong> em tempo real.
             </p>
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">React + Vite</span>
-              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Tailwind CSS</span>
-              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Firebase Spark</span>
+              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Firebase Auth</span>
+              <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">UID Security</span>
               <span className="bg-white/10 px-2.5 py-1 rounded-md backdrop-blur-sm">Gemini AI Studio</span>
             </div>
           </div>
@@ -362,7 +389,12 @@ export default function App() {
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
         <p>Projeto Integrador desenvolvido para o curso de Aperfeiçoamento Profissional • <strong>SENAI-SP 2026</strong></p>
       </footer>
+
+      {/* Modal de Autenticação */}
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
     </div>
   )
 }
-
